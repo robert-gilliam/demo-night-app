@@ -50,9 +50,9 @@ export const submissionRouter = createTRPCRouter({
           data: input,
         });
 
-        // Send confirmation email (non-blocking)
+        // Send confirmation email
         if (event) {
-          sendSubmissionConfirmationEmail({
+          await sendSubmissionConfirmationEmail({
             submissionName: result.name,
             submissionTagline: result.tagline,
             submitterEmail: result.email,
@@ -137,7 +137,7 @@ export const submissionRouter = createTRPCRouter({
         data.status !== currentSubmission.status &&
         (data.status === "CONFIRMED" || data.status === "REJECTED")
       ) {
-        sendSubmissionStatusUpdateEmail({
+        await sendSubmissionStatusUpdateEmail({
           submissionName: updatedSubmission.name,
           submissionTagline: updatedSubmission.tagline,
           submitterEmail: updatedSubmission.email,
