@@ -472,7 +472,7 @@ export default function AdminHomePage() {
               )
             ) : (
               Object.entries(groupedEvents)
-                .sort(([groupNameA], [groupNameB]) => {
+                .sort(([groupNameA, eventsA], [groupNameB, eventsB]) => {
                   let comparison = 0;
 
                   // Sort alphabetically, but keep "No Chapter" at the end
@@ -483,6 +483,11 @@ export default function AdminHomePage() {
                     const nameA = groupNameA.replace(/^[^\s]+\s/, "");
                     const nameB = groupNameB.replace(/^[^\s]+\s/, "");
                     comparison = nameA.localeCompare(nameB);
+                  } else if (groupBy === "month" || groupBy === "quarter") {
+                    // Sort chronologically by using the first event's date in each group
+                    const dateA = new Date(eventsA[0].date);
+                    const dateB = new Date(eventsB[0].date);
+                    comparison = dateA.getTime() - dateB.getTime();
                   } else {
                     comparison = groupNameA.localeCompare(groupNameB);
                   }
