@@ -132,7 +132,7 @@ export function AdminSidebar({
                   <ChevronsUpDown className="ml-auto" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[--radix-popper-anchor-width]">
+              <DropdownMenuContent className="w-[--radix-popper-anchor-width] max-h-[80vh] overflow-y-auto">
                 <DropdownMenuItem onClick={() => router.push("/admin")}>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <ChevronDown className="rotate-90" />
