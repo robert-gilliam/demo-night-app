@@ -37,20 +37,29 @@ export interface SubmissionStatusUpdateData extends SubmissionEmailData {
 export async function sendSubmissionConfirmationEmail(
   data: SubmissionEmailData,
 ): Promise<void> {
+  console.log(`[EMAIL] Starting sendSubmissionConfirmationEmail for ${data.submitterEmail}`);
+
   if (!sesClient) {
-    console.warn("⚠️  AWS SES not configured. Email not sent.");
+    console.warn("⚠️  [EMAIL] AWS SES not configured. Email not sent.");
     return;
   }
 
   try {
+    console.log(`[EMAIL] SES client available, rendering email template`);
+
     // Ensure eventUrl is a full URL
     const eventUrl = data.eventUrl.startsWith("http")
       ? data.eventUrl
       : `${env.NEXT_PUBLIC_URL}${data.eventUrl}`;
 
+    console.log(`[EMAIL] Event URL: ${eventUrl}`);
+
+    const renderStartTime = Date.now();
     const html = await render(
       SubmissionConfirmationEmail({ ...data, eventUrl }),
     );
+    const renderDuration = Date.now() - renderStartTime;
+    console.log(`[EMAIL] Email template rendered in ${renderDuration}ms`);
 
     const command = new SendEmailCommand({
       Source: "Demo Night <noreply@carnationlabs.online>",
@@ -69,11 +78,15 @@ export async function sendSubmissionConfirmationEmail(
       },
     });
 
+    console.log(`[EMAIL] Sending email via SES to ${data.submitterEmail}...`);
+    const sendStartTime = Date.now();
     await sesClient.send(command);
+    const sendDuration = Date.now() - sendStartTime;
 
-    console.log(`✅ Confirmation email sent to ${data.submitterEmail}`);
+    console.log(`✅ [EMAIL] Confirmation email sent to ${data.submitterEmail} in ${sendDuration}ms`);
   } catch (error) {
-    console.error("❌ Failed to send submission confirmation email:", error);
+    console.error("❌ [EMAIL] Failed to send submission confirmation email:", error);
+    console.error("[EMAIL] Error details:", JSON.stringify(error, null, 2));
     // Don't throw - we don't want email failures to break submission creation
   }
 }
@@ -84,18 +97,27 @@ export async function sendSubmissionConfirmationEmail(
 export async function sendSubmissionStatusUpdateEmail(
   data: SubmissionStatusUpdateData,
 ): Promise<void> {
+  console.log(`[EMAIL] Starting sendSubmissionStatusUpdateEmail for ${data.submitterEmail} (status: ${data.status})`);
+
   if (!sesClient) {
-    console.warn("⚠️  AWS SES not configured. Email not sent.");
+    console.warn("⚠️  [EMAIL] AWS SES not configured. Status update email not sent.");
     return;
   }
 
   try {
+    console.log(`[EMAIL] SES client available, rendering status update email template`);
+
     // Ensure eventUrl is a full URL
     const eventUrl = data.eventUrl.startsWith("http")
       ? data.eventUrl
       : `${env.NEXT_PUBLIC_URL}${data.eventUrl}`;
 
+    console.log(`[EMAIL] Event URL: ${eventUrl}`);
+
+    const renderStartTime = Date.now();
     const html = await render(SubmissionStatusUpdateEmail({ ...data, eventUrl }));
+    const renderDuration = Date.now() - renderStartTime;
+    console.log(`[EMAIL] Status update email template rendered in ${renderDuration}ms`);
 
     const subject =
       data.status === "CONFIRMED"
@@ -119,13 +141,17 @@ export async function sendSubmissionStatusUpdateEmail(
       },
     });
 
+    console.log(`[EMAIL] Sending status update email via SES to ${data.submitterEmail}...`);
+    const sendStartTime = Date.now();
     await sesClient.send(command);
+    const sendDuration = Date.now() - sendStartTime;
 
     console.log(
-      `✅ Status update email sent to ${data.submitterEmail} (${data.status})`,
+      `✅ [EMAIL] Status update email sent to ${data.submitterEmail} (${data.status}) in ${sendDuration}ms`,
     );
   } catch (error) {
-    console.error("❌ Failed to send submission status update email:", error);
+    console.error("❌ [EMAIL] Failed to send submission status update email:", error);
+    console.error("[EMAIL] Error details:", JSON.stringify(error, null, 2));
     // Don't throw - we don't want email failures to break status updates
   }
 }

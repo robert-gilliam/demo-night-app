@@ -50,8 +50,13 @@ export const submissionRouter = createTRPCRouter({
           data: input,
         });
 
+        console.log(`[SUBMISSION] Created submission ${result.id} for ${result.email}`);
+
         // Send confirmation email
         if (event) {
+          console.log(`[SUBMISSION] Attempting to send confirmation email to ${result.email}`);
+          const emailStartTime = Date.now();
+
           await sendSubmissionConfirmationEmail({
             submissionName: result.name,
             submissionTagline: result.tagline,
@@ -61,10 +66,16 @@ export const submissionRouter = createTRPCRouter({
             eventDate: event.date,
             eventUrl: `${env.NEXT_PUBLIC_URL}/events/${event.id}`,
           }).catch((error) => {
-            console.error("Failed to send confirmation email:", error);
+            console.error(`[SUBMISSION] Failed to send confirmation email to ${result.email}:`, error);
           });
+
+          const emailDuration = Date.now() - emailStartTime;
+          console.log(`[SUBMISSION] Email function completed in ${emailDuration}ms for ${result.email}`);
+        } else {
+          console.warn(`[SUBMISSION] Event not found, skipping email for submission ${result.id}`);
         }
 
+        console.log(`[SUBMISSION] Returning result for submission ${result.id}`);
         return result;
       } catch (error: any) {
         if (error.code === "P2002") {
@@ -137,6 +148,9 @@ export const submissionRouter = createTRPCRouter({
         data.status !== currentSubmission.status &&
         (data.status === "CONFIRMED" || data.status === "REJECTED")
       ) {
+        console.log(`[ADMIN_UPDATE] Status changed to ${data.status}, sending email to ${updatedSubmission.email}`);
+        const emailStartTime = Date.now();
+
         await sendSubmissionStatusUpdateEmail({
           submissionName: updatedSubmission.name,
           submissionTagline: updatedSubmission.tagline,
@@ -148,8 +162,11 @@ export const submissionRouter = createTRPCRouter({
           status: data.status,
           adminComment: updatedSubmission.comment,
         }).catch((error) => {
-          console.error("Failed to send status update email:", error);
+          console.error(`[ADMIN_UPDATE] Failed to send status update email to ${updatedSubmission.email}:`, error);
         });
+
+        const emailDuration = Date.now() - emailStartTime;
+        console.log(`[ADMIN_UPDATE] Status update email function completed in ${emailDuration}ms for ${updatedSubmission.email}`);
       }
 
       return updatedSubmission;
