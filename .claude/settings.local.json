@@ -34,7 +34,9 @@
       "Bash(EXIT_CODE=$?)",
       "Bash(exit $EXIT_CODE)",
       "Bash(env -i DATABASE_URL=\"postgres://59e5ba749401f8a7c05bb6f1aef0d9aa0a135403c626261ea2ac18931548e778:sk_o5ttk9Bp8x6166za3-v4w@db.prisma.io:5432/postgres?sslmode=require\" DATABASE_URL_NON_POOLING=\"postgres://59e5ba749401f8a7c05bb6f1aef0d9aa0a135403c626261ea2ac18931548e778:sk_o5ttk9Bp8x6166za3-v4w@db.prisma.io:5432/postgres?sslmode=require\" PATH=\"$PATH\" HOME=\"$HOME\" npx prisma db push:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(env -i DATABASE_URL=\"postgres://59e5ba749401f8a7c05bb6f1aef0d9aa0a135403c626261ea2ac18931548e778:sk_o5ttk9Bp8x6166za3-v4w@db.prisma.io:5432/postgres?sslmode=require\" DATABASE_URL_NON_POOLING=\"postgres://59e5ba749401f8a7c05bb6f1aef0d9aa0a135403c626261ea2ac18931548e778:sk_o5ttk9Bp8x6166za3-v4w@db.prisma.io:5432/postgres?sslmode=require\" PATH=\"$PATH\" HOME=\"$HOME\" npx prisma migrate resolve --applied \"0_init\":*)",
+      "Bash(env:*)"
     ],
     "deny": []
   },
