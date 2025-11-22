@@ -1,7 +1,7 @@
 "use client";
 
 import { type Chapter, type Event } from "@prisma/client";
-import { CalendarIcon, PlusIcon, Presentation, Users, ChevronDown, Download } from "lucide-react";
+import { CalendarIcon, PlusIcon, Presentation, Users, ChevronDown, Download, ArrowUp, ArrowDown } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -54,22 +54,24 @@ export default function AdminHomePage() {
     eventType: "all",
     eventStatus: "all",
   });
-  const [groupBy, setGroupBy] = useState<GroupByOption>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("eventGroupBy") as GroupByOption) ?? "none";
-    }
-    return "none";
-  });
+  const [groupBy, setGroupBy] = useState<GroupByOption>("none");
+  const [groupSortOrder, setGroupSortOrder] = useState<"asc" | "desc">("asc");
   const [sortBy, setSortBy] = useState<SortByOption>("date");
   const [sortOrder, setSortOrder] = useState<SortOrderOption>("desc");
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("eventViewMode") as ViewMode) ?? "list";
-    }
-    return "list";
-  });
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [page, setPage] = useState(1);
   const eventsPerPage = 20;
+
+  // Load preferences from localStorage on mount
+  useEffect(() => {
+    const savedGroupBy = localStorage.getItem("eventGroupBy") as GroupByOption;
+    const savedGroupSortOrder = localStorage.getItem("eventGroupSortOrder") as "asc" | "desc";
+    const savedViewMode = localStorage.getItem("eventViewMode") as ViewMode;
+
+    if (savedGroupBy) setGroupBy(savedGroupBy);
+    if (savedGroupSortOrder) setGroupSortOrder(savedGroupSortOrder);
+    if (savedViewMode) setViewMode(savedViewMode);
+  }, []);
 
   // Debounce search
   useEffect(() => {
@@ -90,6 +92,13 @@ export default function AdminHomePage() {
       localStorage.setItem("eventGroupBy", groupBy);
     }
   }, [groupBy]);
+
+  // Save groupSortOrder preference
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("eventGroupSortOrder", groupSortOrder);
+    }
+  }, [groupSortOrder]);
 
   // Save viewMode preference
   useEffect(() => {
@@ -382,7 +391,24 @@ export default function AdminHomePage() {
             />
             <div className="flex flex-wrap items-center gap-4">
               <EventViewSelector value={viewMode} onChange={setViewMode} />
-              <EventGroupBySelector value={groupBy} onChange={setGroupBy} />
+              <div className="flex items-center gap-2">
+                <EventGroupBySelector value={groupBy} onChange={setGroupBy} />
+                {groupBy !== "none" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setGroupSortOrder(groupSortOrder === "asc" ? "desc" : "asc")}
+                    className="h-9 px-3"
+                    title={`Sort groups ${groupSortOrder === "asc" ? "descending" : "ascending"}`}
+                  >
+                    {groupSortOrder === "asc" ? (
+                      <ArrowUp className="h-4 w-4" />
+                    ) : (
+                      <ArrowDown className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+              </div>
               <EventSortControls
                 sortBy={sortBy}
                 sortOrder={sortOrder}
@@ -447,6 +473,8 @@ export default function AdminHomePage() {
             ) : (
               Object.entries(groupedEvents)
                 .sort(([groupNameA], [groupNameB]) => {
+                  let comparison = 0;
+
                   // Sort alphabetically, but keep "No Chapter" at the end
                   if (groupBy === "chapter") {
                     if (groupNameA === "No Chapter") return 1;
@@ -454,9 +482,13 @@ export default function AdminHomePage() {
                     // Remove emoji prefix for comparison (emoji + space)
                     const nameA = groupNameA.replace(/^[^\s]+\s/, "");
                     const nameB = groupNameB.replace(/^[^\s]+\s/, "");
-                    return nameA.localeCompare(nameB);
+                    comparison = nameA.localeCompare(nameB);
+                  } else {
+                    comparison = groupNameA.localeCompare(groupNameB);
                   }
-                  return groupNameA.localeCompare(groupNameB);
+
+                  // Apply sort order (ascending or descending)
+                  return groupSortOrder === "asc" ? comparison : -comparison;
                 })
                 .map(([groupName, groupEvents]) => (
                 <div key={groupName} className="space-y-3">
