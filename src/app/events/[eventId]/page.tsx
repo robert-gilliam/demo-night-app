@@ -1,5 +1,6 @@
 import { type Metadata } from "next";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { type EventConfig } from "~/lib/types/eventConfig";
 import { api } from "~/trpc/server";
@@ -193,6 +194,13 @@ export default async function EventDetailsPage({
             <p className="text-gray-600">This event has already occurred.</p>
           </div>
         )}
+
+        {/* Back to Homepage Link */}
+        <div className="pb-8 text-center">
+          <Link href="/" className="text-blue-600 hover:underline">
+            Back to Homepage
+          </Link>
+        </div>
       </div>
     </main>
   );

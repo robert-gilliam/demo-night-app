@@ -208,6 +208,28 @@ export function EventFilterPanel({
                   variant="outline"
                   size="sm"
                   onClick={() => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    onChange({ ...filters, dateFrom: today, dateTo: undefined });
+                  }}
+                >
+                  Upcoming
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const today = new Date();
+                    today.setHours(23, 59, 59, 999);
+                    onChange({ ...filters, dateFrom: undefined, dateTo: today });
+                  }}
+                >
+                  Past
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
                     const from = new Date();
                     from.setDate(from.getDate() - 7);
                     onChange({ ...filters, dateFrom: from, dateTo: new Date() });
