@@ -6,6 +6,11 @@ import {
   publicProcedure,
 } from "~/server/api/trpc";
 import { db } from "~/server/db";
+import {
+  sendSubmissionConfirmationEmail,
+  sendSubmissionStatusUpdateEmail,
+} from "~/lib/email";
+import { env } from "~/env";
 
 const submissionStatus = z.enum([
   "PENDING",
@@ -32,9 +37,45 @@ export const submissionRouter = createTRPCRouter({
     )
     .mutation(async ({ input }) => {
       try {
+        // Fetch event data for email
+        const event = await db.event.findUnique({
+          where: { id: input.eventId },
+        });
+
+        if (!event) {
+          throw new Error("Event not found");
+        }
+
         const result = await db.submission.create({
           data: input,
         });
+
+        console.log(`[SUBMISSION] Created submission ${result.id} for ${result.email}`);
+
+        // Send confirmation email
+        if (event) {
+          console.log(`[SUBMISSION] Attempting to send confirmation email to ${result.email}`);
+          const emailStartTime = Date.now();
+
+          await sendSubmissionConfirmationEmail({
+            submissionName: result.name,
+            submissionTagline: result.tagline,
+            submitterEmail: result.email,
+            submitterName: result.pocName,
+            eventName: event.name,
+            eventDate: event.date,
+            eventUrl: `${env.NEXT_PUBLIC_URL}/events/${event.id}`,
+          }).catch((error) => {
+            console.error(`[SUBMISSION] Failed to send confirmation email to ${result.email}:`, error);
+          });
+
+          const emailDuration = Date.now() - emailStartTime;
+          console.log(`[SUBMISSION] Email function completed in ${emailDuration}ms for ${result.email}`);
+        } else {
+          console.warn(`[SUBMISSION] Event not found, skipping email for submission ${result.id}`);
+        }
+
+        console.log(`[SUBMISSION] Returning result for submission ${result.id}`);
         return result;
       } catch (error: any) {
         if (error.code === "P2002") {
@@ -85,10 +126,50 @@ export const submissionRouter = createTRPCRouter({
     )
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
-      return db.submission.update({
+
+      // Fetch current submission to check if status is changing
+      const currentSubmission = await db.submission.findUnique({
+        where: { id },
+        include: { event: true },
+      });
+
+      if (!currentSubmission) {
+        throw new Error("Submission not found");
+      }
+
+      const updatedSubmission = await db.submission.update({
         where: { id },
         data,
       });
+
+      // Send status update email if status changed to CONFIRMED or REJECTED
+      if (
+        data.status &&
+        data.status !== currentSubmission.status &&
+        (data.status === "CONFIRMED" || data.status === "REJECTED")
+      ) {
+        console.log(`[ADMIN_UPDATE] Status changed to ${data.status}, sending email to ${updatedSubmission.email}`);
+        const emailStartTime = Date.now();
+
+        await sendSubmissionStatusUpdateEmail({
+          submissionName: updatedSubmission.name,
+          submissionTagline: updatedSubmission.tagline,
+          submitterEmail: updatedSubmission.email,
+          submitterName: updatedSubmission.pocName,
+          eventName: currentSubmission.event.name,
+          eventDate: currentSubmission.event.date,
+          eventUrl: `${env.NEXT_PUBLIC_URL}/events/${currentSubmission.event.id}`,
+          status: data.status,
+          adminComment: updatedSubmission.comment,
+        }).catch((error) => {
+          console.error(`[ADMIN_UPDATE] Failed to send status update email to ${updatedSubmission.email}:`, error);
+        });
+
+        const emailDuration = Date.now() - emailStartTime;
+        console.log(`[ADMIN_UPDATE] Status update email function completed in ${emailDuration}ms for ${updatedSubmission.email}`);
+      }
+
+      return updatedSubmission;
     }),
   convertToDemo: protectedProcedure
     .input(z.string())

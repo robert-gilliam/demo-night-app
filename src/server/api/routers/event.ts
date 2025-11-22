@@ -13,6 +13,7 @@ import { DEFAULT_DEMOS } from "~/lib/types/demo";
 import {
   DEFAULT_EVENT_CONFIG,
   eventConfigSchema,
+  type EventConfig,
 } from "~/lib/types/eventConfig";
 import {
   createTRPCRouter,
@@ -28,6 +29,11 @@ export type CompleteEvent = Event & {
   demos: PublicDemo[];
   awards: Award[];
   eventFeedback: EventFeedback[];
+  chapter: {
+    id: string;
+    name: string;
+    emoji: string;
+  } | null;
 };
 
 export type PublicDemo = Omit<
@@ -103,6 +109,7 @@ export const eventRouter = createTRPCRouter({
         date: z.date().optional(),
         url: z.string().url().optional(),
         config: eventConfigSchema.optional(),
+        chapterId: z.string().nullable().optional(),
       }),
     )
     .mutation(async ({ input }) => {
@@ -112,6 +119,7 @@ export const eventRouter = createTRPCRouter({
         date: input.date,
         url: input.url,
         config: input.config,
+        chapterId: input.chapterId,
       };
 
       try {
@@ -146,6 +154,7 @@ export const eventRouter = createTRPCRouter({
             date: data.date!,
             url: data.url!,
             config: eventConfig,
+            chapterId: data.chapterId,
             demos: {
               create: DEFAULT_DEMOS,
             },
@@ -162,25 +171,212 @@ export const eventRouter = createTRPCRouter({
         throw error;
       }
     }),
-  allAdmin: protectedProcedure.query(() => {
-    return db.event.findMany({
-      orderBy: { date: "desc" },
-      select: {
-        id: true,
-        name: true,
-        date: true,
-        url: true,
-        config: true,
-        secret: true,
-        _count: {
-          select: {
-            demos: true,
-            attendees: true,
+  allAdmin: protectedProcedure
+    .input(
+      z
+        .object({
+          search: z.string().optional(),
+          chapterIds: z.array(z.string()).optional(),
+          dateFrom: z.date().optional(),
+          dateTo: z.date().optional(),
+          eventType: z.enum(["demo", "pitch", "all"]).optional(),
+          eventStatus: z.enum(["upcoming", "past", "all"]).optional(),
+          minDemos: z.number().optional(),
+          maxDemos: z.number().optional(),
+          minAttendees: z.number().optional(),
+          maxAttendees: z.number().optional(),
+          hasAttendees: z.boolean().optional(),
+          hasDemos: z.boolean().optional(),
+          hasFeedback: z.boolean().optional(),
+          hasVotes: z.boolean().optional(),
+          sortBy: z
+            .enum(["date", "name", "demos", "attendees"])
+            .optional()
+            .default("date"),
+          sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
+          limit: z.number().optional(),
+          offset: z.number().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ input }) => {
+      const {
+        search,
+        chapterIds,
+        dateFrom,
+        dateTo,
+        eventType,
+        eventStatus,
+        minDemos,
+        maxDemos,
+        minAttendees,
+        maxAttendees,
+        hasAttendees,
+        hasDemos,
+        hasFeedback,
+        hasVotes,
+        sortBy = "date",
+        sortOrder = "desc",
+        limit,
+        offset,
+      } = input ?? {};
+
+      // Build where clause
+      const where: Prisma.EventWhereInput = {};
+
+      // Search filter
+      if (search?.trim()) {
+        where.OR = [
+          { name: { contains: search, mode: "insensitive" } },
+          { url: { contains: search, mode: "insensitive" } },
+          { id: { contains: search, mode: "insensitive" } },
+          {
+            chapter: {
+              name: { contains: search, mode: "insensitive" },
+            },
           },
-        },
-      },
-    });
-  }),
+        ];
+      }
+
+      // Chapter filter
+      if (chapterIds && chapterIds.length > 0) {
+        where.chapterId = { in: chapterIds };
+      }
+
+      // Date range filter
+      if (dateFrom ?? dateTo) {
+        const dateFilter: any = {};
+        if (dateFrom) dateFilter.gte = dateFrom;
+        if (dateTo) dateFilter.lte = dateTo;
+        where.date = dateFilter;
+      }
+
+      // Event status filter
+      if (eventStatus && eventStatus !== "all") {
+        const now = new Date();
+        if (eventStatus === "upcoming") {
+          const existingDateFilter = where.date as any;
+          where.date = existingDateFilter ? { ...existingDateFilter, gt: now } : { gt: now };
+        } else if (eventStatus === "past") {
+          const existingDateFilter = where.date as any;
+          where.date = existingDateFilter ? { ...existingDateFilter, lte: now } : { lte: now };
+        }
+      }
+
+      // Event type filter (Demo Night vs Pitch Night)
+      if (eventType && eventType !== "all") {
+        // We'll need to filter this post-query since config is JSON
+      }
+
+      // Build orderBy
+      const orderBy: Prisma.EventOrderByWithRelationInput[] = [];
+      if (sortBy === "date") {
+        orderBy.push({ date: sortOrder });
+      } else if (sortBy === "name") {
+        orderBy.push({ name: sortOrder });
+      } else if (sortBy === "demos") {
+        orderBy.push({ demos: { _count: sortOrder } });
+      } else if (sortBy === "attendees") {
+        orderBy.push({ attendees: { _count: sortOrder } });
+      }
+
+      // Execute query
+      const [events, totalCount] = await Promise.all([
+        db.event.findMany({
+          where,
+          orderBy,
+          select: {
+            id: true,
+            name: true,
+            date: true,
+            url: true,
+            config: true,
+            secret: true,
+            chapterId: true,
+            chapter: {
+              select: {
+                id: true,
+                name: true,
+                emoji: true,
+              },
+            },
+            _count: {
+              select: {
+                demos: true,
+                attendees: true,
+                feedback: true,
+                votes: true,
+              },
+            },
+          },
+          take: limit,
+          skip: offset,
+        }),
+        db.event.count({ where }),
+      ]);
+
+      // Post-query filtering
+      let filteredEvents = events;
+
+      // Filter by event type (isPitchNight in config)
+      if (eventType && eventType !== "all") {
+        filteredEvents = filteredEvents.filter((event) => {
+          const config = event.config as EventConfig | null;
+          const isPitchNight = config?.isPitchNight ?? false;
+          return eventType === "pitch" ? isPitchNight : !isPitchNight;
+        });
+      }
+
+      // Filter by demo count
+      if (minDemos !== undefined || maxDemos !== undefined) {
+        filteredEvents = filteredEvents.filter((event) => {
+          const count = event._count.demos;
+          if (minDemos !== undefined && count < minDemos) return false;
+          if (maxDemos !== undefined && count > maxDemos) return false;
+          return true;
+        });
+      }
+
+      // Filter by attendee count
+      if (minAttendees !== undefined || maxAttendees !== undefined) {
+        filteredEvents = filteredEvents.filter((event) => {
+          const count = event._count.attendees;
+          if (minAttendees !== undefined && count < minAttendees) return false;
+          if (maxAttendees !== undefined && count > maxAttendees) return false;
+          return true;
+        });
+      }
+
+      // Filter by has data
+      if (hasAttendees !== undefined) {
+        filteredEvents = filteredEvents.filter(
+          (event) =>
+            hasAttendees ? event._count.attendees > 0 : event._count.attendees === 0,
+        );
+      }
+      if (hasDemos !== undefined) {
+        filteredEvents = filteredEvents.filter(
+          (event) => (hasDemos ? event._count.demos > 0 : event._count.demos === 0),
+        );
+      }
+      if (hasFeedback !== undefined) {
+        filteredEvents = filteredEvents.filter(
+          (event) =>
+            hasFeedback ? event._count.feedback > 0 : event._count.feedback === 0,
+        );
+      }
+      if (hasVotes !== undefined) {
+        filteredEvents = filteredEvents.filter(
+          (event) => (hasVotes ? event._count.votes > 0 : event._count.votes === 0),
+        );
+      }
+
+      return {
+        events: filteredEvents,
+        totalCount,
+        hasMore: limit ? offset! + filteredEvents.length < totalCount : false,
+      };
+    }),
   getAdmin: protectedProcedure
     .input(z.string())
     .query(async ({ input }): Promise<AdminEvent | null> => {
@@ -191,6 +387,13 @@ export const eventRouter = createTRPCRouter({
           attendees: { orderBy: { name: "asc" } },
           awards: { orderBy: { index: "asc" } },
           eventFeedback: { orderBy: { createdAt: "desc" } },
+          chapter: {
+            select: {
+              id: true,
+              name: true,
+              emoji: true,
+            },
+          },
         },
       });
     }),
@@ -497,6 +700,118 @@ export const eventRouter = createTRPCRouter({
         }
       });
   }),
+
+  // Bulk create random events (for testing)
+  createRandomBulk: protectedProcedure
+    .input(
+      z.object({
+        count: z.number().min(1).max(500),
+      }),
+    )
+    .mutation(async ({ input }): Promise<{ count: number }> => {
+      const interestingWords = [
+        "Quantum", "Nebula", "Phoenix", "Crystal", "Thunder", "Shadow", "Cosmic",
+        "Mystic", "Azure", "Crimson", "Golden", "Silver", "Emerald", "Sapphire",
+        "Ruby", "Diamond", "Stellar", "Lunar", "Solar", "Astral", "Ethereal",
+        "Celestial", "Radiant", "Luminous", "Infinite", "Eternal", "Ancient",
+        "Modern", "Future", "Digital", "Analog", "Virtual", "Reality", "Dream",
+        "Vision", "Horizon", "Summit", "Valley", "Ocean", "Mountain", "Forest",
+        "Desert", "Arctic", "Tropical", "Urban", "Rural", "Metro", "Cyber",
+        "Nano", "Mega", "Ultra", "Super", "Hyper", "Alpha", "Beta", "Gamma",
+        "Delta", "Omega", "Prime", "Nova", "Star", "Moon", "Sun", "Comet",
+        "Galaxy", "Universe", "Cosmos", "Void", "Nexus", "Core", "Edge", "Apex",
+        "Zenith", "Nadir", "Vertex", "Vortex", "Matrix", "Vector", "Tensor",
+        "Scalar", "Quantum", "Photon", "Electron", "Neutron", "Proton", "Atom",
+        "Molecule", "Particle", "Wave", "Field", "Force", "Energy", "Power",
+        "Velocity", "Momentum", "Inertia", "Gravity", "Magnetism", "Electric",
+        "Thermal", "Nuclear", "Fusion", "Fission", "Plasma", "Liquid", "Solid",
+        "Gas", "Crystal", "Prism", "Lens", "Mirror", "Reflection", "Refraction",
+        "Diffraction", "Interference", "Resonance", "Harmony", "Discord", "Chaos",
+        "Order", "Balance", "Symmetry", "Asymmetry", "Pattern", "Fractal", "Spiral",
+        "Helix", "Curve", "Line", "Point", "Plane", "Space", "Time", "Dimension",
+        "Parallel", "Perpendicular", "Tangent", "Arc", "Circle", "Square", "Triangle",
+        "Polygon", "Polyhedron", "Sphere", "Cube", "Pyramid", "Cone", "Cylinder",
+        "Torus", "Helix", "Spiral", "Vortex", "Whirl", "Spin", "Rotate", "Orbit",
+        "Revolve", "Circle", "Cycle", "Loop", "Iterate", "Recurse", "Branch",
+        "Merge", "Split", "Join", "Connect", "Link", "Node", "Graph", "Tree",
+        "Network", "Web", "Mesh", "Grid", "Lattice", "Array", "Matrix", "Table",
+        "Stack", "Queue", "Heap", "Hash", "Map", "Set", "List", "Vector",
+        "Tensor", "Scalar", "Vector", "Matrix", "Array", "Tuple", "Record",
+        "Struct", "Class", "Object", "Instance", "Entity", "Component", "System",
+      ];
+
+      const eventTypes = [
+        "Bash", "Festival", "Gathering", "Summit", "Conference", "Meetup",
+        "Symposium", "Convention", "Expo", "Showcase", "Forum", "Seminar",
+        "Workshop", "Hackathon", "Sprint", "Jam", "Rally", "Assembly",
+        "Congress", "Conclave", "Caucus", "Council", "Panel", "Roundtable",
+        "Colloquium", "Mixer", "Social", "Celebration", "Gala", "Soirée",
+      ];
+
+      // Get all existing chapters
+      const chapters = await db.chapter.findMany({
+        select: { id: true },
+      });
+
+      const events = [];
+      for (let i = 0; i < input.count; i++) {
+        // Pick 1-3 random words plus an event type
+        const wordCount = Math.floor(Math.random() * 3) + 1;
+        const words = [];
+        for (let j = 0; j < wordCount; j++) {
+          words.push(interestingWords[Math.floor(Math.random() * interestingWords.length)]!);
+        }
+        const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)]!;
+        const name = `${words.join(" ")} ${eventType}`;
+
+        // Generate a random date within the last 3 years or next year
+        const now = new Date();
+        const threeYearsAgo = new Date(now);
+        threeYearsAgo.setFullYear(now.getFullYear() - 3);
+        const oneYearFromNow = new Date(now);
+        oneYearFromNow.setFullYear(now.getFullYear() + 1);
+
+        const randomTime = threeYearsAgo.getTime() +
+          Math.random() * (oneYearFromNow.getTime() - threeYearsAgo.getTime());
+        const date = new Date(randomTime);
+
+        // Generate a URL-friendly ID
+        const id = `${words.join("-").toLowerCase()}-${eventType.toLowerCase()}-${Date.now()}-${i}`;
+
+        // Random URL
+        const url = `${env.NEXT_PUBLIC_URL}/events/${id}`;
+
+        // Randomly assign to a chapter (70% chance if chapters exist)
+        let chapterId = null;
+        if (chapters.length > 0 && Math.random() < 0.7) {
+          chapterId = chapters[Math.floor(Math.random() * chapters.length)]!.id;
+        }
+
+        // Random config (20% chance of being a pitch night)
+        const isPitchNight = Math.random() < 0.2;
+
+        events.push({
+          id,
+          name,
+          date,
+          url,
+          config: { ...DEFAULT_EVENT_CONFIG, isPitchNight },
+          chapterId,
+        });
+      }
+
+      // Create events in batches of 50 to avoid transaction limits
+      const batchSize = 50;
+      for (let i = 0; i < events.length; i += batchSize) {
+        const batch = events.slice(i, i + batchSize);
+        await db.event.createMany({
+          data: batch,
+          skipDuplicates: true,
+        });
+      }
+
+      return { count: input.count };
+    }),
 });
 
 const completeEventSelect: Prisma.EventSelect = {
@@ -505,6 +820,13 @@ const completeEventSelect: Prisma.EventSelect = {
   date: true,
   url: true,
   config: true,
+  chapter: {
+    select: {
+      id: true,
+      name: true,
+      emoji: true,
+    },
+  },
   demos: {
     orderBy: { index: "asc" },
     select: {

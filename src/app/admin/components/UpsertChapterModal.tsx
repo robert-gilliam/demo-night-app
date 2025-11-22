@@ -1,0 +1,339 @@
+"use client";
+
+import { type Chapter } from "@prisma/client";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+
+import { api } from "~/trpc/react";
+
+import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
+
+import { DeleteChapterButton } from "./DeleteChapter";
+
+// Top 500 most popular emojis organized by category
+const POPULAR_EMOJIS = [
+  // Smileys & Emotion
+  "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃",
+  "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "😚", "😙",
+  "🥲", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫",
+  "🤔", "🤐", "🤨", "😐", "😑", "😶", "😏", "😒", "🙄", "😬",
+  "🤥", "😌", "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕", "🤢",
+  "🤮", "🤧", "🥵", "🥶", "😶‍🌫️", "🥴", "😵", "🤯", "🤠", "🥳",
+  "🥸", "😎", "🤓", "🧐", "😕", "😟", "🙁", "😮", "😯", "😲",
+  "😳", "🥺", "😦", "😧", "😨", "😰", "😥", "😢", "😭", "😱",
+  "😖", "😣", "😞", "😓", "😩", "😫", "🥱", "😤", "😡", "😠",
+  "🤬", "😈", "👿", "💀", "💩", "🤡", "👹", "👺", "👻", "👽",
+
+  // Gestures & Body Parts
+  "👋", "🤚", "🖐", "✋", "🖖", "👌", "🤌", "🤏", "✌️", "🤞",
+  "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "👍",
+  "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝",
+  "🙏", "✍️", "💅", "🤳", "💪", "🦾", "🦿", "🦵", "🦶", "👂",
+  "🦻", "👃", "🧠", "🫀", "🫁", "🦷", "🦴", "👀", "👁", "👅",
+  "👄", "💋", "🩸",
+
+  // People & Professions
+  "👶", "👧", "🧒", "👦", "👩", "🧑", "👨", "👩‍🦱", "🧑‍🦱", "👨‍🦱",
+  "👩‍🦰", "🧑‍🦰", "👨‍🦰", "👱‍♀️", "👱", "👱‍♂️", "👩‍🦳", "🧑‍🦳", "👨‍🦳", "👩‍🦲",
+  "🧑‍🦲", "👨‍🦲", "🧔", "👵", "🧓", "👴", "👲", "👳‍♀️", "👳", "👳‍♂️",
+  "🧕", "👮‍♀️", "👮", "👮‍♂️", "👷‍♀️", "👷", "👷‍♂️", "💂‍♀️", "💂", "💂‍♂️",
+  "🕵️‍♀️", "🕵️", "🕵️‍♂️", "👩‍⚕️", "🧑‍⚕️", "👨‍⚕️", "👩‍🌾", "🧑‍🌾", "👨‍🌾", "👩‍🍳",
+  "🧑‍🍳", "👨‍🍳", "👩‍🎓", "🧑‍🎓", "👨‍🎓", "👩‍🎤", "🧑‍🎤", "👨‍🎤", "👩‍🏫", "🧑‍🏫",
+  "👨‍🏫", "👩‍🏭", "🧑‍🏭", "👨‍🏭", "👩‍💻", "🧑‍💻", "👨‍💻", "👩‍💼", "🧑‍💼", "👨‍💼",
+  "👩‍🔧", "🧑‍🔧", "👨‍🔧", "👩‍🔬", "🧑‍🔬", "👨‍🔬", "👩‍🎨", "🧑‍🎨", "👨‍🎨", "👩‍🚒",
+  "🧑‍🚒", "👨‍🚒", "👩‍✈️", "🧑‍✈️", "👨‍✈️", "👩‍🚀", "🧑‍🚀", "👨‍🚀", "👩‍⚖️", "🧑‍⚖️",
+  "👨‍⚖️", "👰‍♀️", "👰", "👰‍♂️", "🤵‍♀️", "🤵", "🤵‍♂️", "👸", "🤴", "🥷",
+
+  // Animals & Nature
+  "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯",
+  "🦁", "🐮", "🐷", "🐽", "🐸", "🐵", "🙈", "🙉", "🙊", "🐒",
+  "🐔", "🐧", "🐦", "🐤", "🐣", "🐥", "🦆", "🦅", "🦉", "🦇",
+  "🐺", "🐗", "🐴", "🦄", "🐝", "🪱", "🐛", "🦋", "🐌", "🐞",
+  "🐜", "🪰", "🪲", "🪳", "🦟", "🦗", "🕷", "🕸", "🦂", "🐢",
+  "🐍", "🦎", "🦖", "🦕", "🐙", "🦑", "🦐", "🦞", "🦀", "🐡",
+  "🐠", "🐟", "🐬", "🐳", "🐋", "🦈", "🐊", "🐅", "🐆", "🦓",
+  "🦍", "🦧", "🦣", "🐘", "🦛", "🦏", "🐪", "🐫", "🦒", "🦘",
+  "🦬", "🐃", "🐂", "🐄", "🐎", "🐖", "🐏", "🐑", "🦙", "🐐",
+  "🦌", "🐕", "🐩", "🦮", "🐕‍🦺", "🐈", "🐈‍⬛", "🪶", "🐓", "🦃",
+  "🦤", "🦚", "🦜", "🦢", "🦩", "🕊", "🐇", "🦝", "🦨", "🦡",
+  "🦫", "🦦", "🦥", "🐁", "🐀", "🐿", "🦔",
+
+  // Food & Drink
+  "🍇", "🍈", "🍉", "🍊", "🍋", "🍌", "🍍", "🥭", "🍎", "🍏",
+  "🍐", "🍑", "🍒", "🍓", "🫐", "🥝", "🍅", "🫒", "🥥", "🥑",
+  "🍆", "🥔", "🥕", "🌽", "🌶", "🫑", "🥒", "🥬", "🥦", "🧄",
+  "🧅", "🍄", "🥜", "🌰", "🍞", "🥐", "🥖", "🫓", "🥨", "🥯",
+  "🥞", "🧇", "🧀", "🍖", "🍗", "🥩", "🥓", "🍔", "🍟", "🍕",
+  "🌭", "🥪", "🌮", "🌯", "🫔", "🥙", "🧆", "🥚", "🍳", "🥘",
+  "🍲", "🫕", "🥣", "🥗", "🍿", "🧈", "🧂", "🥫", "🍱", "🍘",
+  "🍙", "🍚", "🍛", "🍜", "🍝", "🍠", "🍢", "🍣", "🍤", "🍥",
+  "🥮", "🍡", "🥟", "🥠", "🥡", "🦀", "🦞", "🦐", "🦑", "🦪",
+  "🍦", "🍧", "🍨", "🍩", "🍪", "🎂", "🍰", "🧁", "🥧", "🍫",
+  "🍬", "🍭", "🍮", "🍯", "🍼", "🥛", "☕", "🫖", "🍵", "🍶",
+  "🍾", "🍷", "🍸", "🍹", "🍺", "🍻", "🥂", "🥃", "🥤", "🧋",
+  "🧃", "🧉", "🧊",
+
+  // Travel & Places
+  "🚗", "🚕", "🚙", "🚌", "🚎", "🏎", "🚓", "🚑", "🚒", "🚐",
+  "🛻", "🚚", "🚛", "🚜", "🦯", "🦽", "🦼", "🛴", "🚲", "🛵",
+  "🏍", "🛺", "🚨", "🚔", "🚍", "🚘", "🚖", "🚡", "🚠", "🚟",
+  "🚃", "🚋", "🚞", "🚝", "🚄", "🚅", "🚈", "🚂", "🚆", "🚇",
+  "🚊", "🚉", "✈️", "🛫", "🛬", "🛩", "💺", "🛰", "🚀", "🛸",
+  "🚁", "🛶", "⛵", "🚤", "🛥", "🛳", "⛴", "🚢", "⚓", "⛽",
+  "🚧", "🚦", "🚥", "🚏", "🗺", "🗿", "🗽", "🗼", "🏰", "🏯",
+  "🏟", "🎡", "🎢", "🎠", "⛲", "⛱", "🏖", "🏝", "🏜", "🌋",
+  "⛰", "🏔", "🗻", "🏕", "⛺", "🏠", "🏡", "🏘", "🏚", "🏗",
+  "🏭", "🏢", "🏬", "🏣", "🏤", "🏥", "🏦", "🏨", "🏪", "🏫",
+  "🏩", "💒", "🏛", "⛪", "🕌", "🕍", "🛕", "🕋", "⛩", "🛤",
+  "🛣", "🗾", "🎑", "🏞", "🌅", "🌄", "🌠", "🎇", "🎆", "🌇",
+  "🌆", "🏙", "🌃", "🌌", "🌉", "🌁",
+
+  // Activities & Sports
+  "⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🥏", "🎱",
+  "🪀", "🏓", "🏸", "🏒", "🏑", "🥍", "🏏", "🪃", "🥅", "⛳",
+  "🪁", "🏹", "🎣", "🤿", "🥊", "🥋", "🎽", "🛹", "🛼", "🛷",
+  "⛸", "🥌", "🎿", "⛷", "🏂", "🪂", "🏋️‍♀️", "🏋️", "🏋️‍♂️", "🤼‍♀️",
+  "🤼", "🤼‍♂️", "🤸‍♀️", "🤸", "🤸‍♂️", "⛹️‍♀️", "⛹️", "⛹️‍♂️", "🤺", "🤾‍♀️",
+  "🤾", "🤾‍♂️", "🏌️‍♀️", "🏌️", "🏌️‍♂️", "🏇", "🧘‍♀️", "🧘", "🧘‍♂️", "🏄‍♀️",
+  "🏄", "🏄‍♂️", "🏊‍♀️", "🏊", "🏊‍♂️", "🤽‍♀️", "🤽", "🤽‍♂️", "🚣‍♀️", "🚣",
+  "🚣‍♂️", "🧗‍♀️", "🧗", "🧗‍♂️", "🚵‍♀️", "🚵", "🚵‍♂️", "🚴‍♀️", "🚴", "🚴‍♂️",
+  "🏆", "🥇", "🥈", "🥉", "🏅", "🎖", "🏵", "🎗", "🎫", "🎟",
+  "🎪", "🤹‍♀️", "🤹", "🤹‍♂️", "🎭", "🩰", "🎨", "🎬", "🎤", "🎧",
+  "🎼", "🎹", "🥁", "🪘", "🎷", "🎺", "🪗", "🎸", "🪕", "🎻",
+  "🎲", "♟", "🎯", "🎳", "🎮", "🎰", "🧩",
+
+  // Objects
+  "⌚", "📱", "📲", "💻", "⌨️", "🖥", "🖨", "🖱", "🖲", "🕹",
+  "🗜", "💾", "💿", "📀", "📼", "📷", "📸", "📹", "🎥", "📽",
+  "🎞", "📞", "☎️", "📟", "📠", "📺", "📻", "🎙", "🎚", "🎛",
+  "🧭", "⏱", "⏲", "⏰", "🕰", "⌛", "⏳", "📡", "🔋", "🔌",
+  "💡", "🔦", "🕯", "🪔", "🧯", "🛢", "💸", "💵", "💴", "💶",
+  "💷", "🪙", "💰", "💳", "💎", "⚖️", "🪜", "🧰", "🪛", "🔧",
+  "🔨", "⚒", "🛠", "⛏", "🪚", "🔩", "⚙️", "🪤", "🧱", "⛓",
+  "🧲", "🔫", "💣", "🧨", "🪓", "🔪", "🗡", "⚔️", "🛡", "🚬",
+  "⚰️", "🪦", "⚱️", "🏺", "🔮", "📿", "🧿", "💈", "⚗️", "🔭",
+  "🔬", "🕳", "🩹", "🩺", "💊", "💉", "🩸", "🧬", "🦠", "🧫",
+  "🧪", "🌡", "🧹", "🪠", "🧺", "🧻", "🚽", "🚰", "🚿", "🛁",
+  "🛀", "🧼", "🪥", "🪒", "🧽", "🪣", "🧴", "🛎", "🔑", "🗝",
+  "🚪", "🪑", "🛋", "🛏", "🛌", "🧸", "🪆", "🖼", "🪞", "🪟",
+  "🛍", "🛒", "🎁", "🎈", "🎏", "🎀", "🪄", "🪅", "🎊", "🎉",
+  "🎎", "🏮", "🎐", "🧧", "✉️", "📩", "📨", "📧", "💌", "📥",
+  "📤", "📦", "🏷", "🪧", "📪", "📫", "📬", "📭", "📮", "📯",
+  "📜", "📃", "📄", "📑", "🧾", "📊", "📈", "📉", "🗒", "🗓",
+  "📆", "📅", "🗑", "📇", "🗃", "🗳", "🗄", "📋", "📁", "📂",
+  "🗂", "🗞", "📰", "📓", "📔", "📒", "📕", "📗", "📘", "📙",
+  "📚", "📖", "🔖", "🧷", "🔗", "📎", "🖇", "📐", "📏", "🧮",
+  "📌", "📍", "✂️", "🖊", "🖋", "✒️", "🖌", "🖍", "📝", "✏️",
+  "🔍", "🔎", "🔏", "🔐", "🔒", "🔓",
+
+  // Symbols & Misc
+  "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔",
+  "❤️‍🔥", "❤️‍🩹", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝",
+  "💟", "☮️", "✝️", "☪️", "🕉", "☸️", "✡️", "🔯", "🕎", "☯️",
+  "☦️", "🛐", "⛎", "♈", "♉", "♊", "♋", "♌", "♍", "♎",
+  "♏", "♐", "♑", "♒", "♓", "🆔", "⚛️", "🉑", "☢️", "☣️",
+  "📴", "📳", "🈶", "🈚", "🈸", "🈺", "🈷️", "✴️", "🆚", "💮",
+  "🉐", "㊙️", "㊗️", "🈴", "🈵", "🈹", "🈲", "🅰️", "🅱️", "🆎",
+  "🆑", "🅾️", "🆘", "❌", "⭕", "🛑", "⛔", "📛", "🚫", "💯",
+  "💢", "♨️", "🚷", "🚯", "🚳", "🚱", "🔞", "📵", "🚭", "❗",
+  "❕", "❓", "❔", "‼️", "⁉️", "🔅", "🔆", "〽️", "⚠️", "🚸",
+  "🔱", "⚜️", "🔰", "♻️", "✅", "🈯", "💹", "❇️", "✳️", "❎",
+  "🌐", "💠", "Ⓜ️", "🌀", "💤", "🏧", "🚾", "♿", "🅿️", "🛗",
+  "🈳", "🈂️", "🛂", "🛃", "🛄", "🛅", "🚹", "🚺", "🚼", "⚧",
+  "🚻", "🚮", "🎦", "📶", "🈁", "🔣", "ℹ️", "🔤", "🔡", "🔠",
+  "🆖", "🆗", "🆙", "🆒", "🆕", "🆓", "0️⃣", "1️⃣", "2️⃣", "3️⃣",
+  "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟", "🔢", "#️⃣", "*️⃣",
+  "⏏️", "▶️", "⏸", "⏯", "⏹", "⏺", "⏭", "⏮", "⏩", "⏪",
+  "⏫", "⏬", "◀️", "🔼", "🔽", "➡️", "⬅️", "⬆️", "⬇️", "↗️",
+  "↘️", "↙️", "↖️", "↕️", "↔️", "↪️", "↩️", "⤴️", "⤵️", "🔀",
+  "🔁", "🔂", "🔄", "🔃", "🎵", "🎶", "➕", "➖", "➗", "✖️",
+  "🟰", "♾", "💲", "💱", "™️", "©️", "®️", "👁‍🗨", "🔚", "🔙",
+  "🔛", "🔝", "🔜", "〰️", "➰", "➿", "✔️", "☑️", "🔘", "🔴",
+  "🟠", "🟡", "🟢", "🔵", "🟣", "⚫", "⚪", "🟤", "🔺", "🔻",
+  "🔸", "🔹", "🔶", "🔷", "🔳", "🔲", "▪️", "▫️", "◾", "◽",
+  "◼️", "◻️", "🟥", "🟧", "🟨", "🟩", "🟦", "🟪", "⬛", "⬜",
+  "🟫", "🔈", "🔇", "🔉", "🔊", "🔔", "🔕", "📣", "📢", "💬",
+  "💭", "🗯", "♠️", "♣️", "♥️", "♦️", "🃏", "🎴", "🀄", "🕐",
+  "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚",
+  "🕛", "🕜", "🕝", "🕞", "🕟", "🕠", "🕡", "🕢", "🕣", "🕤",
+  "🕥", "🕦", "🕧",
+];
+
+export function UpsertChapterModal({
+  chapter,
+  onSubmit,
+  onDeleted,
+  open,
+  onOpenChange,
+}: {
+  chapter?: Chapter;
+  onSubmit: (chapter: Chapter) => void;
+  onDeleted: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const utils = api.useUtils();
+  const createMutation = api.chapter.create.useMutation();
+  const updateMutation = api.chapter.update.useMutation();
+
+  const [emojiInputMode, setEmojiInputMode] = useState<"picker" | "custom">(
+    "picker",
+  );
+
+  const { register, handleSubmit, setValue, watch } = useForm({
+    values: {
+      name: chapter?.name ?? "",
+      emoji: chapter?.emoji ?? "",
+    },
+  });
+
+  const currentEmoji = watch("emoji");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{chapter ? "Edit" : "Create New"} Chapter</DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={handleSubmit((data) => {
+            const mutation = chapter
+              ? updateMutation.mutateAsync({
+                  id: chapter.id,
+                  name: data.name,
+                  emoji: data.emoji,
+                })
+              : createMutation.mutateAsync({
+                  name: data.name,
+                  emoji: data.emoji,
+                });
+
+            mutation
+              .then((result) => {
+                toast.success(
+                  `Successfully ${chapter ? "updated" : "created"} chapter!`,
+                );
+
+                // Invalidate the chapter.all query cache so all components refetch
+                void utils.chapter.all.invalidate();
+
+                onOpenChange(false);
+                onSubmit(result);
+              })
+              .catch((error) => {
+                toast.error(
+                  `Failed to ${chapter ? "update" : "create"} chapter: ${error.message}`,
+                );
+              });
+          })}
+          className="flex flex-col gap-4"
+        >
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Name</span>
+            <input
+              type="text"
+              {...register("name", { required: true })}
+              className="rounded-md border border-gray-200 p-2"
+              placeholder="San Francisco"
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold">Emoji</span>
+              {currentEmoji && (
+                <span className="text-2xl" title="Selected emoji">
+                  {currentEmoji}
+                </span>
+              )}
+            </div>
+
+            <div className="flex gap-2 rounded-md border border-gray-200 p-1">
+              <button
+                type="button"
+                onClick={() => setEmojiInputMode("picker")}
+                className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                  emojiInputMode === "picker"
+                    ? "bg-gray-900 text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                Pick Emoji
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmojiInputMode("custom")}
+                className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                  emojiInputMode === "custom"
+                    ? "bg-gray-900 text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                Custom
+              </button>
+            </div>
+
+            {emojiInputMode === "picker" ? (
+              <div className="max-h-[240px] overflow-y-auto rounded-md border border-gray-200 p-2">
+                <div className="grid grid-cols-8 gap-1">
+                  {POPULAR_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setValue("emoji", emoji)}
+                      className={`flex h-10 w-10 items-center justify-center rounded text-2xl transition-colors hover:bg-gray-100 ${
+                        currentEmoji === emoji
+                          ? "bg-blue-100 ring-2 ring-blue-500"
+                          : ""
+                      }`}
+                      title={emoji}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <input
+                type="text"
+                {...register("emoji", { required: true })}
+                className="rounded-md border border-gray-200 p-2"
+                placeholder="🌉"
+                autoComplete="off"
+                maxLength={10}
+              />
+            )}
+
+            <p className="text-xs text-gray-500">
+              Used as an icon to represent this chapter
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="submit"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="flex-1"
+            >
+              {chapter ? "Update Chapter" : "Create Chapter"}
+            </Button>
+            {chapter && (
+              <DeleteChapterButton
+                chapterId={chapter.id}
+                onDeleted={onDeleted}
+              />
+            )}
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
