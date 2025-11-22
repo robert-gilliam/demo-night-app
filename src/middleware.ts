@@ -1,24 +1,23 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { withAuth } from "next-auth/middleware";
+import { NextResponse } from "next/server";
 
-const VERCEL_DEPLOYMENT = !!process.env.VERCEL;
-
-export default async function middleware(req: NextRequest) {
-  const path = req.nextUrl.pathname;
-
-  // Skip auth check if admin/[eventId]/submissions
-  if (path.endsWith("/submissions")) {
+export default withAuth(
+  function middleware(req) {
+    // Skip auth check if admin/[eventId]/submissions
+    if (req.nextUrl.pathname.endsWith("/submissions")) {
+      return NextResponse.next();
+    }
     return NextResponse.next();
-  }
-
-  const cookieName = `${VERCEL_DEPLOYMENT ? "__Secure-" : ""}next-auth.session-token`;
-  const session = !!req.cookies.get(cookieName);
-  if (!session) {
-    return NextResponse.redirect(
-      new URL(`/api/auth/signin?callbackUrl=${path}`, req.url),
-    );
-  }
-  return NextResponse.next();
-}
+  },
+  {
+    callbacks: {
+      authorized: ({ token }) => !!token,
+    },
+    pages: {
+      signIn: "/api/auth/signin",
+    },
+  },
+);
 
 export const config = {
   matcher: ["/admin/:path*"],
