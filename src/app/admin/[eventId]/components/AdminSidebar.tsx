@@ -95,7 +95,7 @@ export function AdminSidebar({
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton className="h-14">
+                <SidebarMenuButton className="h-20">
                   <div className="flex items-center gap-2">
                     <Image
                       src={branding.logoPath}
@@ -104,12 +104,17 @@ export function AdminSidebar({
                       height={40}
                       className="-ml-1"
                     />
-                    <div className="flex flex-col items-start">
+                    <div className="flex flex-col items-start min-w-0 flex-1">
                       <div className="flex items-center">
                         <div className="line-clamp-1 text-base font-bold leading-6">
                           {event.name}
                         </div>
                       </div>
+                      {event.chapter && (
+                        <div className="text-sm text-muted-foreground truncate w-full">
+                          {event.chapter.emoji} {event.chapter.name}
+                        </div>
+                      )}
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <CalendarIcon className="h-3 w-3" />
                         <time>
@@ -141,10 +146,15 @@ export function AdminSidebar({
                       key={e.id}
                       onClick={() => router.push(`/admin/${e.id}`)}
                     >
-                      <div className="flex flex-col items-start">
+                      <div className="flex flex-col items-start min-w-0 w-full">
                         <div className="line-clamp-1 font-bold leading-6">
                           {e.name}
                         </div>
+                        {e.chapter && (
+                          <div className="text-sm text-muted-foreground truncate w-full">
+                            {e.chapter.emoji} {e.chapter.name}
+                          </div>
+                        )}
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <CalendarIcon className="h-3 w-3" />
                           <time>
