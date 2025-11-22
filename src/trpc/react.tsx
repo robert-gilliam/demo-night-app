@@ -1,11 +1,13 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { loggerLink, unstable_httpBatchStreamLink } from "@trpc/client";
+import { TRPCLink, TRPCClientError, loggerLink, unstable_httpBatchStreamLink } from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
 import { type inferRouterInputs, type inferRouterOutputs } from "@trpc/server";
 import { useState } from "react";
 import SuperJSON from "superjson";
+import { signOut } from "next-auth/react";
+import { observable } from "@trpc/server/observable";
 
 import { type AppRouter } from "~/server/api/root";
 
@@ -19,6 +21,45 @@ const getQueryClient = () => {
   }
   // Browser: use singleton pattern to keep the same query client
   return (clientQueryClientSingleton ??= createQueryClient());
+};
+
+/**
+ * Custom link to handle authentication errors and trigger re-authentication
+ */
+const authErrorLink: TRPCLink<AppRouter> = () => {
+  return ({ next, op }) => {
+    return observable((observer) => {
+      const unsubscribe = next(op).subscribe({
+        next(value) {
+          observer.next(value);
+        },
+        error(err) {
+          // Check if this is an UNAUTHORIZED error
+          if (err instanceof TRPCClientError && err.data?.code === "UNAUTHORIZED") {
+            // Prevent infinite re-auth loops by checking sessionStorage
+            const reAuthAttemptKey = "trpc-reauth-attempt";
+            const lastAttempt = sessionStorage.getItem(reAuthAttemptKey);
+            const now = Date.now();
+
+            // Only re-auth if we haven't tried in the last 5 seconds
+            if (!lastAttempt || now - parseInt(lastAttempt) > 5000) {
+              sessionStorage.setItem(reAuthAttemptKey, now.toString());
+
+              // Clear authentication and redirect to sign in
+              void signOut({ callbackUrl: window.location.href });
+            }
+          }
+
+          observer.error(err);
+        },
+        complete() {
+          observer.complete();
+        },
+      });
+
+      return unsubscribe;
+    });
+  };
 };
 
 export const api = createTRPCReact<AppRouter>();
@@ -43,6 +84,7 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
   const [trpcClient] = useState(() =>
     api.createClient({
       links: [
+        authErrorLink,
         loggerLink({
           enabled: (op) =>
             process.env.NODE_ENV === "development" ||
