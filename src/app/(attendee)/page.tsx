@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import HallOfFamePage from "../hall-of-fame/page";
 
 import { api } from "~/trpc/server";
@@ -29,6 +31,11 @@ export default async function AttendeePage() {
   return (
     <main className="m-auto flex size-full max-w-xl flex-col text-black">
       <Workspaces currentEvent={currentEvent} />
+      <footer className="m-auto w-full max-w-xl pb-8 text-center">
+        <Link href="/" className="text-sm text-gray-500 underline hover:text-gray-700">
+          Back to homepage
+        </Link>
+      </footer>
     </main>
   );
 }
